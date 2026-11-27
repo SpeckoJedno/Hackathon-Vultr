@@ -1,0 +1,13 @@
+[Unit]
+Description=MailGuard email-checking agent
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+WorkingDirectory=/opt/mailguard/mailguard
+EnvironmentFile=/etc/mailguard.env
+ExecStart=/opt/mailguard/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 80
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

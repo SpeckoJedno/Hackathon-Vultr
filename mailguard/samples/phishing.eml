@@ -1,0 +1,32 @@
+From: "PayPal Security" <service@paypa1-support.xyz>
+To: felix@acme-startup.com
+Subject: Your account has been limited - action required
+Date: Fri, 27 Nov 2026 09:14:00 +0000
+Message-ID: <2078271207594009581@mailguard.demo>
+Authentication-Results: mx.acme-startup.com; spf=fail
+ smtp.mailfrom=paypa1-support.xyz; dkim=none; dmarc=fail
+Reply-To: help@secure-mailbox.ru
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="===============6187294676641412132=="
+
+--===============6187294676641412132==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+We noticed unusual activity. Verify your account within 24 hours or your acco=
+unt will be suspended.
+
+--===============6187294676641412132==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<p>Dear customer,</p><p>We noticed <b>unusual activity</b> on your account.
+Please <b>verify your account within 24 hours</b> or your account will be sus=
+pended.</p>
+<p><a href=3D"http://paypa1-login.xyz/verify?id=3D88213">https://www.paypal.c=
+om/signin</a></p>
+<p>Enter your password and card number to confirm your identity.</p>
+
+--===============6187294676641412132==--

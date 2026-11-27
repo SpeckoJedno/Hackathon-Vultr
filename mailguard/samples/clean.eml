@@ -1,0 +1,19 @@
+From: Anna Berg <anna@acme-startup.com>
+To: team@acme-startup.com
+Subject: Notes from Thursday's planning
+Date: Fri, 27 Nov 2026 09:14:00 +0000
+Message-ID: <7925605491864124401@mailguard.demo>
+Authentication-Results: mx.acme-startup.com; spf=pass
+ smtp.mailfrom=acme-startup.com; dkim=pass; dmarc=pass
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+Hi all,
+
+Notes from Thursday are in the shared drive: https://docs.acme-startup.com/pl=
+anning
+
+Next sync is Monday at 10.
+
+Anna

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MailGuard</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mute:#5d6470;--line:#e3e6eb;--acc:#2f5bea;
+--ok:#137a3f;--okbg:#e5f5ec;--warn:#8a5a00;--warnbg:#fff3d6;--bad:#b42318;--badbg:#fdecea;--code:#f1f3f6}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--ink:#e8eaee;--mute:#9aa3b2;--line:#2a2f3a;
+--acc:#7c9bff;--ok:#5fd394;--okbg:#12291d;--warn:#f1c35b;--warnbg:#2c2410;--bad:#ff8a80;--badbg:#341614;--code:#1e222b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+header{padding:18px 16px;border-bottom:1px solid var(--line);background:var(--card)}
+header .in,main{max-width:980px;margin:0 auto}header h1{margin:0;font-size:20px}header p{margin:2px 0 0;color:var(--mute);font-size:13px}
+main{padding:20px 16px 60px;display:grid;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px}
+h2{font-size:15px;margin:0 0 10px}h3{font-size:13px;margin:16px 0 6px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+#drop{border:2px dashed var(--line);border-radius:10px;padding:26px;text-align:center;cursor:pointer;color:var(--mute)}
+#drop.over{border-color:var(--acc);color:var(--acc)}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--acc)}button.primary{background:var(--bad);border-color:var(--bad);color:#fff}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.status{font-size:13px;color:var(--mute)}
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-weight:600;font-size:13px;text-transform:uppercase}
+.clean{background:var(--okbg);color:var(--ok)}.suspicious{background:var(--warnbg);color:var(--warn)}.malicious{background:var(--badbg);color:var(--bad)}
+.critical{color:var(--bad);font-weight:600}.high{color:var(--bad)}.medium{color:var(--warn)}.low{color:var(--mute)}
+ul{margin:4px 0;padding-left:20px}li{margin:2px 0;overflow-wrap:anywhere}
+.note{padding:10px 12px;border-radius:8px;background:var(--warnbg);color:var(--warn);font-size:14px;margin-top:10px}
+.step{border-left:3px solid var(--line);padding:4px 0 4px 10px;margin:6px 0;font-size:14px;overflow-wrap:anywhere}
+.step.tool_call{border-color:var(--acc)}.step.guardrail{border-color:var(--bad)}.step b{font-size:12px;color:var(--mute);text-transform:uppercase}
+pre{background:var(--code);padding:10px;border-radius:8px;overflow:auto;font-size:12px;max-height:260px;margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}td{padding:5px 6px;border-top:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.meta{color:var(--mute);font-size:13px}.hidden{display:none}
+.hist{cursor:pointer}.hist:hover td{background:var(--code)}
+</style>
+</head>
+<body>
+<header><div class="in"><h1>🛡️ MailGuard</h1><p>An AI agent that investigates suspicious email inside a disposable sandbox. Nothing is quarantined without your approval.</p></div></header>
+<main>
+  <section class="card">
+    <h2>Check an email</h2>
+    <div id="drop">Drop a <b>.eml</b> file here, or click to choose one<input id="file" type="file" accept=".eml,message/rfc822" hidden></div>
+    <div class="row" style="margin-top:12px"><span class="status">Or try a sample:</span><span id="samples" class="row"></span></div>
+    <p id="status" class="status"></p>
+  </section>
+
+  <section id="result" class="card hidden">
+    <div class="row" style="justify-content:space-between">
+      <div class="row"><span id="verdict" class="badge"></span><span id="subject" style="font-weight:600"></span></div>
+      <span id="mode" class="meta"></span>
+    </div>
+    <p id="from" class="meta" style="margin:6px 0 0"></p>
+    <p id="summary" style="font-size:16px;margin:12px 0 6px"></p>
+    <ul id="reasons"></ul>
+    <div id="override" class="note hidden"></div>
+    <div id="decision" class="note hidden"></div>
+    <h3>Agent investigation</h3><div id="steps"></div>
+    <div id="detwrap"><h3>Sandbox detonation</h3><div id="det"></div></div>
+    <h3>Rule-based findings</h3><table id="findings"></table>
+  </section>
+
+  <section class="card"><h2>History</h2><table id="history"></table><p id="health" class="meta"></p></section>
+</main>
+<script>
+// All email-derived text is inserted with textContent, never innerHTML: the email is hostile input.
+const $ = id => document.getElementById(id);
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+}
+
+async function run(promise, label) {
+  $('status').textContent = `Investigating ${label}… (attachments run in a sandbox, this can take ~15 s)`;
+  try { show(await promise); $('status').textContent = ''; }
+  catch (e) { $('status').textContent = 'Error: ' + e.message; }
+  history();
+}
+
+function upload(f) { const fd = new FormData(); fd.append('file', f); run(api('/api/scan', {method: 'POST', body: fd}), f.name); }
+
+function show(s) {
+  $('result').classList.remove('hidden');
+  const v = $('verdict'); v.textContent = s.verdict; v.className = 'badge ' + s.verdict;
+  $('subject').textContent = s.static.headers.subject || '(no subject)';
+  $('from').textContent = 'From: ' + s.static.headers.from + (s.static.sandboxed ? '' : '  ·  ⚠ parsed without sandbox (Docker unavailable)');
+  $('mode').textContent = s.agent_mode === 'llm' ? `Agent: ${s.model} on Vultr Serverless Inference` : 'Agent: rule-based fallback (no LLM key)';
+  $('summary').textContent = s.summary;
+  const ul = $('reasons'); ul.replaceChildren(...(s.reasons || []).map(r => el('li', r)));
+  const o = $('override'); o.classList.toggle('hidden', !s.guardrail_override);
+  o.textContent = 'Guardrail: the model gave a softer verdict than the sandbox evidence supports (possible prompt injection), so the stricter verdict is shown.';
+  decision(s);
+
+  const steps = $('steps'); steps.replaceChildren();
+  for (const st of s.steps) {
+    const d = el('div', null, 'step ' + st.kind); d.append(el('b', st.kind.replace('_', ' ')), document.createElement('br'));
+    if (st.text) d.append(el('span', st.text));
+    if (st.kind === 'tool_call') d.append(el('span', `${st.tool}(${JSON.stringify(st.args)})`));
+    if (st.kind === 'tool_result') d.append(el('pre', JSON.stringify(st.result, null, 1).slice(0, 3000)));
+    steps.append(d);
+  }
+
+  const det = $('det'); det.replaceChildren();
+  const dets = Object.values(s.detonations || {});
+  $('detwrap').classList.toggle('hidden', !dets.length);
+  for (const d of dets) {
+    det.append(el('p', d.ran ? `${d.filename}: ran in a fresh container (no network, read-only disk, user nobody, 128 MB, ${d.limits.timeout_s}s limit)` + (d.timed_out ? ' — killed at timeout' : ` — exit ${d.exit_code}`) : `${d.filename || ''} not executed: ${d.reason}`, 'meta'));
+    if (d.malicious_behaviour?.length) { const u = el('ul'); d.malicious_behaviour.forEach(b => u.append(el('li', b, 'high'))); det.append(el('b', 'What it tried to do'), u); }
+    if (d.contained?.length) { det.append(el('b', 'What the sandbox stopped')); det.append(el('pre', d.contained.join('\n'))); }
+    if (d.events?.length) { det.append(el('b', 'Behaviour trace')); det.append(el('pre', d.events.map(e => `${e.event.padEnd(20)} ${e.detail}`).join('\n'))); }
+  }
+
+  const t = $('findings'); t.replaceChildren();
+  if (!s.static.findings.length) t.append(Object.assign(el('tr'), {}).appendChild(el('td', 'No findings.')).parentNode);
+  for (const f of s.static.findings) { const tr = el('tr'); tr.append(el('td', f.severity, f.severity), el('td', f.category, 'meta'), el('td', f.detail)); t.append(tr); }
+}
+
+function decision(s) {
+  const d = $('decision'); d.replaceChildren(); d.classList.add('hidden');
+  if (s.quarantine === 'pending_approval') {
+    d.classList.remove('hidden');
+    d.append(el('span', 'The agent recommends quarantining this email. Approve? '));
+    const a = el('button', 'Approve quarantine', 'primary'), r = el('button', 'Release');
+    a.onclick = () => decide(s.id, 'approve'); r.onclick = () => decide(s.id, 'reject');
+    d.append(a, document.createTextNode(' '), r);
+  } else if (s.quarantine === 'quarantined') { d.classList.remove('hidden'); d.textContent = '✔ Quarantined after human approval.'; }
+  else if (s.quarantine === 'released_by_human') { d.classList.remove('hidden'); d.textContent = 'Released by a human reviewer.'; }
+}
+
+async function decide(id, what) {
+  try { await api(`/api/scans/${id}/${what}`, {method: 'POST'}); show(await api('/api/scans/' + id)); history(); }
+  catch (e) { alert(e.message); }
+}
+
+async function history() {
+  const rows = await api('/api/scans').catch(() => []);
+  const t = $('history'); t.replaceChildren();
+  if (!rows.length) { const tr = el('tr'); tr.append(el('td', 'No emails checked yet.', 'meta')); t.append(tr); }
+  for (const r of rows) {
+    const tr = el('tr', null, 'hist'); const b = el('span', r.verdict, 'badge ' + r.verdict);
+    const td = el('td'); td.append(b);
+    tr.append(td, el('td', r.filename), el('td', r.quarantine.replaceAll('_', ' '), 'meta'), el('td', new Date(r.scanned_at * 1000).toLocaleTimeString(), 'meta'));
+    tr.onclick = async () => show(await api('/api/scans/' + r.id));
+    t.append(tr);
+  }
+}
+
+const drop = $('drop');
+drop.onclick = () => $('file').click();
+$('file').onchange = e => e.target.files[0] && upload(e.target.files[0]);
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); e.dataTransfer.files[0] && upload(e.dataTransfer.files[0]); };
+
+api('/api/samples').then(list => $('samples').replaceChildren(...list.map(n => {
+  const b = el('button', n.replace('.eml', '').replace('_', ' ')); b.onclick = () => run(api('/api/scan-sample/' + n, {method: 'POST'}), n); return b;
+})));
+api('/api/health').then(h => $('health').textContent = `Sandbox: ${h.docker ? 'Docker ready' : 'Docker NOT available (attachments will not be run)'} · LLM: ${h.llm_configured ? (h.model || 'auto-selected model') : 'not configured (rule-based fallback)'}`);
+history();
+</script>
+</body>
+</html>
