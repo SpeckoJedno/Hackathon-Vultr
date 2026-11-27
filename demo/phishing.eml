@@ -1,0 +1,29 @@
+From: "Microsoft 365 Security" <no-reply@micros0ft-account.test>
+Reply-To: support@micros0ft-account.test
+To: finance@contoso.com
+Subject: [Action required] Your mailbox password expires today
+Date: Fri, 27 Nov 2026 07:02:11 +0000
+Message-ID: <a81f2c@micros0ft-account.test>
+Authentication-Results: mx.contoso.com; spf=fail smtp.mailfrom=micros0ft-account.test; dkim=none; dmarc=fail
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+
+Your Microsoft 365 password expires today. Verify your account within 24 hours
+or your mailbox will be suspended:
+http://login.micros0ft-account.test/track
+
+Microsoft 365 Security Team
+
+--b1
+Content-Type: text/html; charset=utf-8
+
+<html><body style="font-family:Segoe UI,Arial">
+<p>Your <b>Microsoft 365</b> password expires <b>today</b>.</p>
+<p>Verify your account within 24 hours or your mailbox will be suspended.</p>
+<p><a href="http://login.micros0ft-account.test/track">https://login.microsoftonline.com/verify</a></p>
+<p>Microsoft 365 Security Team</p>
+</body></html>
+--b1--

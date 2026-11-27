@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MailGuard</title>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#fff;--ink:#16181d;--muted:#667085;--line:#e4e7ec;--accent:#2f5bea;
+  --safe:#127a3e;--safe-bg:#e3f6ea;--sus:#9a5b00;--sus-bg:#fff2d6;--dan:#b42318;--dan-bg:#fde7e5;
+  --code:#0f1420;--code-ink:#d7dde8;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0e1116;--panel:#161a21;--ink:#e6e8ec;--muted:#98a2b3;--line:#262c36;--accent:#7b9bff;
+  --safe:#5fd38d;--safe-bg:#11301f;--sus:#f5c15c;--sus-bg:#33270e;--dan:#ff8a80;--dan-bg:#3a1513;
+  --code:#0a0d12;--code-ink:#cfd6e2;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.logo{font-weight:700;font-size:18px;display:flex;align-items:center;gap:8px}
+.logo svg{width:22px;height:22px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.chip{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip.ok{color:var(--safe);border-color:currentColor}.chip.bad{color:var(--dan);border-color:currentColor}
+nav{display:flex;gap:4px;padding:0 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+nav button{background:none;border:0;padding:10px 14px;font:inherit;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+nav button.active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.count{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--dan-bg);color:var(--dan);font-size:12px}
+main{display:grid;grid-template-columns:360px 1fr;gap:16px;padding:16px 20px;max-width:1500px;margin:0 auto}
+@media (max-width:900px){main{grid-template-columns:1fr;padding:12px 16px}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 10px}
+h3{margin:0 0 4px;font-size:18px;overflow-wrap:anywhere}
+.btn{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:6px 11px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{background:var(--dan);border-color:var(--dan);color:#fff}
+.demos{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+textarea{width:100%;min-height:70px;font:12px ui-monospace,monospace;border:1px solid var(--line);border-radius:7px;padding:8px;background:var(--bg);color:var(--ink);resize:vertical}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.list{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.item{padding:10px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--panel)}
+.item:hover{border-color:var(--accent)}.item.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.item .top{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.item .subj{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .from{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;letter-spacing:.03em}
+.b-SAFE{background:var(--safe-bg);color:var(--safe)}.b-SUSPICIOUS{background:var(--sus-bg);color:var(--sus)}
+.b-DANGEROUS{background:var(--dan-bg);color:var(--dan)}.b-pending{background:var(--line);color:var(--muted)}
+.b-big{font-size:14px;padding:5px 14px}
+.muted{color:var(--muted)}.small{font-size:12px}
+.detail{display:flex;flex-direction:column;gap:14px;min-width:0}
+.head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.banner{padding:12px 14px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.banner.q{background:var(--dan-bg);color:var(--dan)}.banner.w{background:var(--sus-bg);color:var(--sus)}.banner.ok{background:var(--safe-bg);color:var(--safe)}
+.grid2{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px}
+@media (max-width:1200px){.grid2{grid-template-columns:1fr}}
+.log{background:var(--code);color:var(--code-ink);border-radius:8px;padding:10px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:560px;overflow:auto}
+.log .ev{display:flex;gap:8px;padding:2px 0;overflow-wrap:anywhere}
+.log .t{color:#7d8799;flex:none}.log .k{flex:none;width:92px;color:#8fb3ff}
+.log .k.sandbox{color:#9aa4b2}.log .k.container_started{color:#f5c15c}.log .k.container_destroyed{color:#5fd38d}
+.log .k.finding{color:#ff9f80}.log .k.verdict,.log .k.quarantine{color:#ff8a80;font-weight:700}.log .k.delivered,.log .k.released{color:#5fd38d;font-weight:700}
+.log .k.llm,.log .k.vision,.log .k.plan{color:#c9a7ff}.log .k.screenshot{color:#7fdbff}
+.tag{display:inline-block;font-size:11px;padding:0 6px;border-radius:4px;margin-left:6px;background:#22324f;color:#9cc0ff}
+.tag.gone{background:#143b26;color:#6fe0a0}
+ul.reasons{margin:0;padding-left:18px}ul.reasons li{margin:4px 0;overflow-wrap:anywhere}
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.shot{border:1px solid var(--line);border-radius:8px;overflow:hidden;cursor:zoom-in;background:var(--bg)}
+.shot img{width:100%;display:block;aspect-ratio:16/10;object-fit:cover;object-position:top}
+.shot div{padding:6px 8px;font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+pre.body{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 ui-monospace,monospace;background:var(--bg);padding:10px;border-radius:8px;max-height:260px;overflow:auto;margin:0}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}
+.ok{color:var(--safe)}.bad{color:var(--dan)}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;padding:20px;z-index:10;cursor:zoom-out}
+#lightbox img{max-width:100%;max-height:100%;border-radius:6px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:13px}.kv b{color:var(--muted);font-weight:500}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/><path d="M8 12l3 3 5-6"/></svg>MailGuard</div>
+  <span class="muted small">Every link and attachment is opened in a disposable sandbox on Vultr, never on your machine.</span>
+  <div class="chips">
+    <span class="chip" id="c-sbx">Sandbox: …</span>
+    <span class="chip" id="c-llm">Model: …</span>
+    <span class="chip" id="c-live">Live: connecting</span>
+  </div>
+</header>
+<nav>
+  <button data-tab="inbox" class="active">Inbox</button>
+  <button data-tab="quarantine">Quarantine<span class="count" id="qcount">0</span></button>
+  <button data-tab="containment">Containment</button>
+</nav>
+
+<main id="view-mail">
+  <section>
+    <div class="card" id="submit-card">
+      <h2>Check an email</h2>
+      <div class="demos" id="demos"></div>
+      <textarea id="raw" placeholder="Paste a raw email (.eml source) or plain text…"></textarea>
+      <div class="row">
+        <button class="btn primary" id="analyze">Analyze</button>
+        <label class="btn">Upload .eml<input type="file" id="file" accept=".eml,.txt,message/rfc822" hidden></label>
+      </div>
+    </div>
+    <div class="list" id="list"></div>
+  </section>
+  <section class="detail" id="detail"><div class="card empty">Pick a demo email or upload one to start.</div></section>
+</main>
+
+<main id="view-containment" class="hidden" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+  <section class="card">
+    <h2>Containment self-test</h2>
+    <p class="muted">Starts a sandbox container that actively tries to read secrets, write outside /tmp, and reach the VM,
+      the cloud metadata service and the internal network. The table shows what the sandbox allowed.</p>
+    <div class="row"><button class="btn primary" id="probe">Run containment test</button></div>
+    <div id="probe-res" style="margin-top:12px"></div>
+  </section>
+  <section class="card">
+    <h2>Sandbox policy (every container)</h2>
+    <div class="kv" id="limits"></div>
+    <h2 style="margin-top:16px">Live log</h2>
+    <div class="log" id="probe-log"></div>
+  </section>
+</main>
+
+<div id="lightbox"><img alt="screenshot"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+// Build DOM safely: all strings become text nodes (email/page content is never parsed as HTML).
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") n.className = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (v !== null && v !== undefined && v !== false) n.setAttribute(k, v);
+  }
+  for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) n.append(k instanceof Node ? k : String(k));
+  return n;
+}
+const fmtT = ts => new Date(ts * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
+const badge = (v, big) => el("span", {class: `badge b-${v || "pending"}${big ? " b-big" : ""}`}, v || "ANALYZING…");
+
+let emails = {}, selected = null, current = null, tab = "inbox";
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error((await r.text()).slice(0, 200));
+  return r.json();
+}
+
+// ---------------- header / health
+async function health() {
+  try {
+    const h = await api("/api/health");
+    const s = $("#c-sbx"); s.textContent = h.docker && h.sandbox_image ? "Sandbox: ready" : "Sandbox: NOT ready";
+    s.className = "chip " + (h.docker && h.sandbox_image ? "ok" : "bad");
+    const l = $("#c-llm"); l.textContent = h.llm_configured ? `Model: ${h.vision_model} · Vultr Serverless Inference` : "Model: no API key (rules only)";
+    l.className = "chip " + (h.llm_configured ? "ok" : "bad");
+    const lim = $("#limits"); lim.replaceChildren();
+    for (const [k, v] of Object.entries(h.sandbox_limits)) lim.append(el("b", {}, k), el("span", {}, v));
+  } catch (e) { $("#c-sbx").textContent = "Backend unreachable"; }
+}
+
+// ---------------- list
+async function loadList() {
+  const list = await api("/api/emails");
+  emails = Object.fromEntries(list.map(e => [e.id, e]));
+  renderList();
+}
+function renderList() {
+  const all = Object.values(emails).sort((a, b) => b.received_at - a.received_at);
+  const shown = tab === "quarantine" ? all.filter(e => e.quarantined) : all;
+  $("#qcount").textContent = all.filter(e => e.quarantined).length;
+  const list = $("#list"); list.replaceChildren();
+  if (!shown.length) list.append(el("div", {class: "muted small", style: "padding:8px"},
+      tab === "quarantine" ? "Quarantine is empty." : "No emails yet."));
+  for (const e of shown) {
+    list.append(el("div", {class: "item" + (e.id === selected ? " sel" : ""), onclick: () => select(e.id)},
+      el("div", {class: "top"}, el("span", {class: "subj"}, e.subject || "(no subject)"), badge(e.verdict)),
+      el("div", {class: "from"}, e.from),
+      el("div", {class: "from"}, fmtT(e.received_at) + " · " +
+        (e.quarantined ? "in quarantine" : e.released ? "released by " + e.released.by : e.status === "done" ? "delivered" : e.status))));
+  }
+}
+
+// ---------------- detail
+async function select(id) {
+  selected = id; renderList();
+  current = await api(`/api/emails/${id}`);
+  renderDetail();
+}
+function renderDetail() {
+  const e = current, d = $("#detail"); d.replaceChildren();
+  if (!e) return;
+  const head = el("div", {class: "card"},
+    el("div", {class: "head"},
+      el("div", {style: "min-width:0"}, el("h3", {}, e.subject), el("div", {class: "muted"}, "From " + e.from),
+        el("div", {class: "muted small"}, `${e.source} · auth SPF=${e.auth?.spf ?? "?"} DKIM=${e.auth?.dkim ?? "?"} DMARC=${e.auth?.dmarc ?? "?"}`)),
+      badge(e.verdict, true)),
+    e.summary ? el("p", {style: "margin:10px 0 0"}, e.summary) : null);
+  d.append(head);
+
+  if (e.quarantined) d.append(el("div", {class: "banner q"},
+    el("span", {}, el("b", {}, "Quarantined. "), "This email will not be delivered until a human releases it."),
+    el("button", {class: "btn danger", onclick: release}, "Release")));
+  else if (e.released) d.append(el("div", {class: "banner ok"}, `Released by ${e.released.by} at ${fmtT(e.released.at)} and delivered.`));
+  else if (e.verdict === "SUSPICIOUS") d.append(el("div", {class: "banner w"}, "Delivered with a warning banner. Be careful with links and attachments."));
+  else if (e.verdict === "SAFE") d.append(el("div", {class: "banner ok"}, "Delivered. No signs of phishing or malware."));
+
+  const logBox = el("div", {class: "log", id: "log"});
+  for (const ev of e.events) logBox.append(evRow(ev));
+  const left = el("div", {class: "card"}, el("h2", {}, "Live step log"), logBox);
+
+  const right = el("div", {style: "display:flex;flex-direction:column;gap:14px;min-width:0"});
+  if (e.reasons?.length || e.ai_reasons?.length) {
+    right.append(el("div", {class: "card"}, el("h2", {}, "Why"),
+      el("ul", {class: "reasons"}, (e.reasons || []).map(r => el("li", {}, r))),
+      e.ai_reasons?.length ? el("div", {}, el("div", {class: "muted small", style: "margin-top:8px"},
+        `Model reasoning (${e.verdict_detail?.model_name || "model"}: ${e.verdict_detail?.model || "n/a"}, evidence floor: ${e.verdict_detail?.rules})`),
+        el("ul", {class: "reasons"}, e.ai_reasons.map(r => el("li", {}, r)))) : null));
+  }
+  const shotsBox = el("div", {class: "shots", id: "shots"});
+  for (const s of e.shots) shotsBox.append(shotCard(s));
+  right.append(el("div", {class: "card"}, el("h2", {}, "Screenshot trail (taken inside the sandbox)"),
+    e.shots.length ? shotsBox : el("div", {class: "muted small", id: "shots-empty"}, e.links.length ? "Waiting for the sandbox…" : "No links to open."), e.shots.length ? null : shotsBox));
+  if (e.files?.length) right.append(el("div", {class: "card"}, el("h2", {}, "Attachments (inspected in sandbox, never executed)"),
+    ...e.files.map(f => el("div", {style: "margin-bottom:10px"},
+      el("div", {}, el("b", {}, f.filename || "?"), el("span", {class: "muted small"}, ` · ${f.file_type || ""} · ${f.size ?? "?"} bytes`)),
+      el("div", {class: "muted small", style: "font-family:monospace;overflow-wrap:anywhere"}, "sha256 " + (f.sha256 || "")),
+      el("ul", {class: "reasons"}, (f.findings || []).map(x => el("li", {class: x.severity === "low" ? "" : "bad"}, `${x.severity}: ${x.detail}`)))))));
+  if (e.pages?.length) right.append(el("div", {class: "card"}, el("h2", {}, "Pages opened"),
+    el("table", {}, el("tr", {}, el("th", {}, "Link"), el("th", {}, "Final URL"), el("th", {}, "Password form"), el("th", {}, "Blocked")),
+      e.pages.map(p => el("tr", {}, el("td", {}, p.url), el("td", {}, p.result.final_url || p.result.error || "-"),
+        el("td", {class: p.result.password_form ? "bad" : ""}, p.result.password_form ? "yes" : "no"),
+        el("td", {}, String((p.result.blocked_requests || []).length)))))));
+  right.append(el("div", {class: "card"}, el("h2", {}, "Email text (shown as plain text, never rendered)"), el("pre", {class: "body"}, e.body || "")));
+
+  d.append(el("div", {class: "grid2"}, left, right));
+  logBox.scrollTop = logBox.scrollHeight;
+}
+function evRow(ev) {
+  const extra = [];
+  if (ev.kind === "container_started") extra.push(el("span", {class: "tag"}, "512 MB · 1 CPU · read-only · non-root · no caps · internet-only"));
+  if (ev.kind === "container_destroyed") extra.push(el("span", {class: "tag gone"}, ev.data?.verified ? "destroyed ✓" : "destroy?"));
+  return el("div", {class: "ev"}, el("span", {class: "t"}, fmtT(ev.ts)), el("span", {class: "k " + ev.kind}, ev.kind.replace("container_", "")),
+    el("span", {}, ev.msg, ...extra));
+}
+function shotCard(s) {
+  return el("div", {class: "shot", onclick: () => { const lb = $("#lightbox"); lb.querySelector("img").src = s.src; lb.style.display = "flex"; }},
+    el("img", {src: s.src, loading: "lazy", alt: "sandbox screenshot"}), el("div", {}, `${s.label} · ${s.url}`));
+}
+$("#lightbox").onclick = () => $("#lightbox").style.display = "none";
+
+async function release() {
+  const by = prompt("Release this email from quarantine. Your name (logged):", "analyst");
+  if (by === null) return;
+  const f = new FormData(); f.append("by", by || "analyst");
+  await api(`/api/emails/${current.id}/release`, {method: "POST", body: f});
+  await select(current.id);
+}
+
+// ---------------- submit
+async function submit(form) {
+  const r = await api("/api/emails", {method: "POST", body: form});
+  emails[r.id] = {id: r.id, subject: "…", from: "", received_at: Date.now() / 1000, status: "analyzing"};
+  switchTab("inbox"); await loadList(); select(r.id);
+}
+$("#analyze").onclick = () => { const v = $("#raw").value.trim(); if (!v) return; const f = new FormData(); f.append("raw", v); submit(f); $("#raw").value = ""; };
+$("#file").onchange = ev => { const file = ev.target.files[0]; if (!file) return; const f = new FormData(); f.append("file", file); submit(f); ev.target.value = ""; };
+async function loadDemos() {
+  const names = await api("/api/demos"); const box = $("#demos"); box.replaceChildren(el("span", {class: "muted small", style: "width:100%"}, "Demo emails:"));
+  for (const n of names) box.append(el("button", {class: "btn", onclick: () => { const f = new FormData(); f.append("demo", n); submit(f); }}, n.replace(".eml", "")));
+}
+
+// ---------------- containment tab
+$("#probe").onclick = async () => {
+  $("#probe").disabled = true; $("#probe-log").replaceChildren(); $("#probe-res").replaceChildren(el("div", {class: "muted"}, "Running…"));
+  try {
+    const r = await api("/api/containment-test", {method: "POST"});
+    $("#probe-res").replaceChildren(
+      el("div", {class: "banner " + (r.all_contained ? "ok" : "q"), style: "margin-bottom:10px"}, r.all_contained ? "All checks contained." : "Some checks were NOT contained."),
+      el("table", {}, el("tr", {}, el("th", {}, "Check"), el("th", {}, "Observed inside the sandbox"), el("th", {}, "")),
+        (r.checks || []).map(c => el("tr", {}, el("td", {}, c.check), el("td", {class: "small"}, c.value),
+          el("td", {class: c.contained ? "ok" : "bad"}, c.contained ? "✓" : "✗")))));
+  } catch (e) { $("#probe-res").textContent = "Error: " + e.message; }
+  $("#probe").disabled = false;
+};
+
+// ---------------- tabs
+function switchTab(t) {
+  tab = t;
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.tab === t));
+  $("#view-mail").classList.toggle("hidden", t === "containment");
+  $("#view-containment").classList.toggle("hidden", t !== "containment");
+  $("#submit-card").classList.toggle("hidden", t === "quarantine");
+  renderList();
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+
+// ---------------- live updates (SSE)
+function connect() {
+  const es = new EventSource("/api/stream");
+  es.onopen = () => { const c = $("#c-live"); c.textContent = "Live: connected"; c.className = "chip ok"; };
+  es.onerror = () => { const c = $("#c-live"); c.textContent = "Live: reconnecting"; c.className = "chip bad"; };
+  es.onmessage = m => {
+    const msg = JSON.parse(m.data);
+    if (msg.type === "email") {
+      emails[msg.email.id] = msg.email; renderList();
+      if (current && msg.email.id === current.id) select(current.id);
+    } else if (msg.type === "deleted") { delete emails[msg.id]; renderList(); }
+    else if (msg.type === "event") {
+      if (msg.email_id === "containment") { const lg = $("#probe-log"); lg.append(evRow(msg.event)); lg.scrollTop = lg.scrollHeight; return; }
+      if (!current || msg.email_id !== current.id) return;
+      current.events.push(msg.event);
+      const lg = $("#log"); if (lg) { lg.append(evRow(msg.event)); lg.scrollTop = lg.scrollHeight; }
+      if (msg.event.kind === "screenshot") {
+        current.shots.push(msg.event.data); const sb = $("#shots"); $("#shots-empty")?.remove();
+        if (sb) sb.append(shotCard(msg.event.data));
+      }
+    }
+  };
+}
+
+health(); loadDemos(); loadList(); connect(); setInterval(health, 30000);
+</script>
+</body>
+</html>

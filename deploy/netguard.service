@@ -1,0 +1,13 @@
+[Unit]
+Description=MailGuard sandbox firewall (sandbox bridge -> internet only)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/mailguard-netguard.env
+ExecStart=/bin/sh /opt/mailguard-netguard.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,135 +1,138 @@
 # 🛡️ MailGuard
 
-**An AI agent that checks suspicious email inside a disposable sandbox, running on Vultr.**
+**Checks incoming company email for phishing and malware by opening every link and attachment
+inside a disposable, locked-down sandbox on Vultr. Never on the user's machine, never in the app process.**
 
-Email is the most common way attacks get in: phishing links, fake invoices, and
-attachments that steal keys or wipe disks. MailGuard treats every email as hostile.
-An LLM agent on **Vultr Serverless Inference** investigates it, but every risky step
-(parsing the email, running its attachments) happens in a throwaway Docker container
-with no network. Nothing is quarantined until a person clicks **Approve**.
+- Each link is opened in a **fresh Playwright + Chromium container**. MailGuard follows redirects, takes screenshots, and records password forms, downloads and suspicious scripts.
+- Each attachment is copied into a **fresh container** and inspected statically: type, hashes, macros, embedded links, EICAR. It is **never executed**.
+- A vision model on **Vultr Serverless Inference** looks at the screenshots and judges whether the page is a fake login or brand impersonation.
+- Verdict: **SAFE / SUSPICIOUS / DANGEROUS**, with reasons and the screenshot trail as proof.
+- DANGEROUS mail goes to **quarantine**. A human must press **Release** before anything is delivered.
+- A live dashboard (SSE) shows every step, including *container started* and *container destroyed*.
 
-## How it works
+## Architecture
 
+```mermaid
+flowchart LR
+  U[Browser<br/>dashboard] -- "HTTP + SSE :80" --> B
+
+  subgraph VM["Vultr VM · Ubuntu 24.04 · Docker (65.20.114.181)"]
+    B["backend container<br/>FastAPI · parser · pipeline<br/>holds API key + Docker socket"]
+    subgraph SBXNET["sandbox network mg-sandbox 172.30.99.0/24<br/>netguard firewall: internet only"]
+      S1["sandbox: link #1<br/>Playwright + Chromium"]
+      S2["sandbox: attachment #1<br/>static inspection"]
+      D["demo-web (nginx)<br/>fake-login.html, hostile.html"]
+    end
+    B -- "docker create/start/rm<br/>job JSON on stdin,<br/>events on stdout" --> S1
+    B --> S2
+    S1 -- "http :80 only" --> D
+  end
+
+  B -- "plan · vision · verdict<br/>(JSON only, no tools)" --> L["Vultr Serverless Inference<br/>api.vultrinference.com/v1<br/>qwen3.8-27b (vision)"]
+  S1 -- allowed --> I((Internet))
+  S1 -. "REJECTED: VM / backend, 169.254.169.254,<br/>Docker + private ranges" .-x B
 ```
- .eml upload ──► Web app (FastAPI, Vultr VM)
-                   │
-                   ├─► Sandbox #1: parse email (no network)        analyzer.py
-                   │      SPF/DKIM/DMARC, fake brand senders, lookalike
-                   │      domains, link text ≠ real target, disguised
-                   │      attachments (invoice.pdf.exe), EICAR, macros…
-                   │
-                   ├─► Agent loop (LLM on Vultr Serverless Inference) agent.py
-                   │      reads the pre-scan, then calls tools:
-                   │        detonate_attachment ─► Sandbox #2 (fresh per file) sandbox.py + tracer.py
-                   │        check_url           ─► static URL checks (never fetched)
-                   │      returns verdict + plain-language explanation
-                   │
-                   ├─► Guardrail: rule/sandbox evidence sets a floor; if the model
-                   │   is talked into "clean" (prompt injection), stricter verdict wins
-                   │
-                   └─► Human approves or releases ──► data/quarantine + data/audit.jsonl
-```
 
-**Sandbox limits for every container:** `--network none`, read-only root filesystem,
-user `nobody`, all capabilities dropped, `no-new-privileges`, 128 MB RAM, 0.5 CPU,
-64 processes, 10 s timeout, fresh container each time (`--rm`). Decoy secrets are
-planted in the environment so key theft shows up in the trace.
+### Flow for one email
 
-**Behaviour tracing:** Python attachments run under audit hooks (file opens, sockets,
-subprocesses, `exec` of decoded code, secret env reads); shell scripts run under `sh -x`.
+1. **Ingest:** paste, upload a `.eml`, or click a demo. The backend parses the sender, SPF/DKIM/DMARC, links (including *link text shows X but goes to Y*) and attachments. It only reads the email as data and never renders it.
+2. **Plan:** the LLM picks which links to open and explains why. Policy: at most 4 links, at least one link is always opened, and **every attachment is always inspected**, whatever the model says.
+3. **Links:** for each link, the backend runs `docker create` → `docker start -ai` on a new container. The runner streams NDJSON events back: logs, screenshots and the result. Then `docker rm -f`, and the backend checks that the container is gone. The dashboard shows `destroyed ✓`.
+4. **Attachments:** each file is sent to a new container on stdin and written to a `noexec` tmpfs. The runner records the type (magic bytes), SHA-256/MD5, EICAR, MZ/ELF headers, double extensions, VBA macros (oletools), PDF `/JavaScript` `/Launch`, archive contents and embedded URLs.
+5. **Vision:** the final screenshot goes to the vision model, together with the sandbox facts (final URL, form targets, scripts, blocked requests).
+6. **Verdict:** deterministic evidence rules set a **floor**, and the LLM verdict can raise it but never lower it. If a hostile email talks the model into saying "SAFE", the dashboard shows *Guardrail: the model said SAFE, but sandbox evidence sets the floor at DANGEROUS*.
+7. **Quarantine:** DANGEROUS email is held until someone presses **Release**. The release is logged with name and time.
 
-## Demo samples
+## Containment (what every sandbox container gets)
 
-`python3 mailguard/make_samples.py` writes four harmless emails to `mailguard/samples/`:
+| Control | How |
+|---|---|
+| Fresh container per link / attachment, destroyed after | `docker create` … `docker rm -f`, then a check that it no longer exists |
+| No secrets | Only `HOME=/tmp` is passed. No `.env`, no volumes, no Docker socket |
+| Read-only filesystem except `/tmp` | `--read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m` |
+| Memory / CPU / processes | `--memory 512m --memory-swap 512m --cpus 1 --pids-limit 256` |
+| 60 s timeout | backend kills the container at 60 s (`SANDBOX_TIMEOUT`) |
+| Non-root, no capabilities | `--user pwuser --cap-drop ALL --security-opt no-new-privileges` |
+| Internet only | own bridge `mg-sandbox` + [`deploy/netguard.sh`](deploy/netguard.sh): `DOCKER-USER` and `INPUT` rules **reject** traffic to the VM itself (incl. its public IP / the backend), `169.254.169.254`, `10/8`, `172.16/12`, `192.168/16`, `100.64/10`, `127/8`. Only exception: the demo web server on port 80 |
+| LLM cannot act | The model gets no tools. It receives data and returns JSON. Email and page text is wrapped in `<untrusted>` tags, and instructions inside them count as a prompt-injection signal |
+| Dashboard never renders email HTML | All strings are inserted with `textContent` |
 
-| Sample | What it shows | Verdict |
+The **Containment** tab runs a probe container that tries to break out and shows the result live. It tries to run as root, read secrets from env, find the Docker socket, write to `/opt` and `/etc`, reach the metadata service, the Docker gateway, the backend and private IPs, and confirms the internet is reachable.
+
+## Demo emails (`demo/`)
+
+| File | What happens | Verdict |
 |---|---|---|
-| `clean.eml` | Normal internal email | clean |
-| `phishing.eml` | "PayPal" from `paypa1-support.xyz`, SPF/DMARC fail, link shows paypal.com but goes elsewhere | malicious |
-| `eicar.eml` | `invoice.pdf.exe` with the EICAR antivirus **test** file | malicious |
-| `hostile_script.eml` | Lookalike sender + a script that tries to steal keys, phone home, add a cron backdoor, `rm -rf`, run hidden code and loop forever. **The sandbox stops all of it.** | malicious |
+| `safe.eml` | Colleague's meeting notes, link to docs.vultr.com (real internet) | SAFE |
+| `phishing.eml` + `fake-login.html` | "Microsoft 365" from `micros0ft-account.test`. The link text shows `login.microsoftonline.com`. 302 → 302 → fake Microsoft login that posts the password to another domain and logs keystrokes | DANGEROUS |
+| `hostile.eml` + `hostile.html` | Prompt injection in the email and hidden in the page. The page tries `169.254.169.254`, the backend, the Docker bridge and private IPs (all blocked), runs `eval(atob())`, and starts a drive-by `.xlsx.exe` download | DANGEROUS |
+| `attachment.eml` | `Invoice_INV-4471.pdf.exe` containing the EICAR test file | DANGEROUS |
 
-The hostile script refuses to do anything unless it sees `MAILGUARD_SANDBOX=1`, so it is
-safe even if someone runs it by accident. `eicar.eml` is generated rather than committed
-so antivirus on your laptop doesn't quarantine the repo.
+The `.html` pages are served by the `demo-web` nginx container, which is **only reachable from the sandbox network** under fake hostnames (Docker network aliases in `docker-compose.yml`). `attachment.eml` is generated by `demo/make_attachment_eml.py` (deploy runs it), so antivirus on laptops leaves the repo alone. To add a demo page, drop it in `demo/` and link to `http://docs.sharefile-portal.test/<file>.html`, or add a new alias.
 
-## Run it on a Vultr VM
-
-1. Create an **Ubuntu 24.04** cloud compute instance (1 vCPU / 2 GB is enough).
-2. In the Vultr console, open **Serverless Inference**, create a subscription and copy the API key.
-3. SSH in and run:
+## Deploy (one command on the VM)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SpeckoJedno/Hackathon-Vultr/main/mailguard/deploy/setup_vm.sh -o setup_vm.sh
+ssh root@65.20.114.181
 ```
 
 ```bash
-sudo bash setup_vm.sh https://github.com/SpeckoJedno/Hackathon-Vultr.git
-```
-
-4. Add the key (and optionally a model) and restart:
-
-```bash
-sudo nano /etc/mailguard.env
+git clone https://github.com/SpeckoJedno/Hackathon-Vultr.git /opt/mailguard && cd /opt/mailguard
 ```
 
 ```bash
-sudo systemctl restart mailguard
-```
-
-5. Open `http://<VM-IP>` and click a sample.
-
-To list the models your key can use (leave `MODEL` empty to auto-pick one):
-
-```bash
-curl -s https://api.vultrinference.com/v1/models -H "Authorization: Bearer $VULTR_INFERENCE_API_KEY"
-```
-
-Without a key, MailGuard still works: a rule-based fallback agent runs the same sandboxed tools.
-
-## Run locally (needs Docker)
-
-```bash
-cd mailguard && pip install -r requirements.txt && python3 make_samples.py
+cp .env.example .env && nano .env   # set VULTR_INFERENCE_KEY
 ```
 
 ```bash
-python3 sandbox.py
+./deploy.sh
 ```
 
-```bash
-uvicorn app:app --port 8000
-```
+`deploy.sh` builds the sandbox image, starts `backend` and `demo-web` with Docker Compose, and installs the sandbox firewall as a systemd unit (`mailguard-netguard.service`), so it survives reboots. It then prints `/api/health`. Open **http://65.20.114.181**.
 
-`python3 sandbox.py` is a containment self-test: it should print `NETWORK: blocked`,
-`ROOTFS: blocked`, `UID: 65534` and `timed_out: true`.
+To update: `git pull && ./deploy.sh`. Logs: `docker compose logs -f backend`.
 
-## Configuration
+### Configuration (`.env`)
 
 | Variable | Default | |
 |---|---|---|
-| `VULTR_INFERENCE_API_KEY` | (empty → rule-based agent) | Serverless Inference key |
-| `MODEL` | (auto-pick from `/v1/models`) | Chat model id |
-| `VULTR_INFERENCE_BASE_URL` | `https://api.vultrinference.com/v1` | OpenAI-compatible endpoint |
-| `SANDBOX_IMAGE` | `python:3.12-alpine` | Container image for sandboxes |
-| `SANDBOX_TIMEOUT` | `10` | Seconds before an attachment is killed |
+| `VULTR_INFERENCE_KEY` | – | Serverless Inference key. Without it MailGuard runs on rules only |
+| `MODEL` / `VISION_MODEL` | `qwen3.8-27b` | Any model from `/v1/models` with `image` input and `text` output |
+| `PUBLIC_HOST` | VM IP | Used by the firewall and the containment test |
+| `SANDBOX_TIMEOUT` | `60` | Seconds before a sandbox is killed |
+| `SANDBOX_PARALLEL` | `2` | Concurrent sandboxes (2 vCPU / 4 GB VM) |
+
+To list vision-capable models (the endpoint is public):
+
+```bash
+curl -s https://api.vultrinference.com/v1/models | python3 -c "import json,sys; [print(m['id']) for m in json.load(sys.stdin)['data'] if any(i['type']=='image' for i in m.get('input_modalities',[])) and any(o['type']=='text' for o in m.get('output_modalities',[]))]"
+```
 
 ## Files
 
-| File | Role |
-|---|---|
-| `mailguard/app.py` | Web app + API, human approval, audit log |
-| `mailguard/agent.py` | Agent loop, tools, prompt-injection guardrail, offline fallback |
-| `mailguard/sandbox.py` | Docker sandbox runner |
-| `mailguard/tracer.py` | Runs inside the container, records what a script tries to do |
-| `mailguard/analyzer.py` | Static email analysis (stdlib only) |
-| `mailguard/static/index.html` | UI (renders email text with `textContent` only, never HTML) |
+```
+docker-compose.yml        backend + demo-web + sandbox image build
+deploy.sh                 one-command deploy on the VM
+deploy/netguard.sh        sandbox firewall (internet only), + systemd unit
+backend/app/main.py       REST API, SSE stream, quarantine/release, containment test
+backend/app/pipeline.py   plan → links → attachments → vision → verdict (+ evidence floor)
+backend/app/sandbox.py    starts/streams/destroys one container per job
+backend/app/llm.py        Vultr Serverless Inference client + prompts (untrusted-data wrapping)
+backend/app/parser.py     email parsing + static header/link checks
+backend/app/static/       dashboard (vanilla JS, SSE)
+sandbox/Dockerfile        Playwright + Chromium + oletools, runs as pwuser
+sandbox/runner.py         runs inside the container: link / file / probe modes
+demo/                     demo emails and pages
+```
 
-## Limits (honest list)
+## API
 
-- Only `.py` and `.sh` attachments are executed; other files get static analysis.
-- Links are checked statically, not opened. Next step: open them in a sandboxed headless
-  browser and let a vision model judge whether the page is a fake login.
-- Scans are kept in memory (the audit log and quarantine are on disk).
-- Docker containers share the host kernel. For production, use gVisor (`--runtime runsc`)
-  or a microVM per detonation.
+`POST /api/emails` (form: `file`, `raw` or `demo`) · `GET /api/emails` · `GET /api/emails/{id}` ·
+`POST /api/emails/{id}/release` · `POST /api/containment-test` · `GET /api/stream` (SSE) · `GET /api/health`
+
+## Honest limits
+
+- The backend holds the Docker socket, so it is trusted. The sandboxes are not, and they never get the socket.
+- Containers share the host kernel. In production, add gVisor (`--runtime runsc`) or a microVM per job.
+- Attachments get static analysis only. There is no dynamic detonation of executables and no AV engine (EICAR is detected by signature).
+- State is a JSON file in `./data`, and nothing is really delivered by mail. "Delivered" is a status.

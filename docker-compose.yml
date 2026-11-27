@@ -1,0 +1,54 @@
+# MailGuard on one Vultr VM.
+#   backend   FastAPI app + dashboard (port 80). Holds the API key. Starts sandboxes.
+#   demo-web  nginx serving demo/*.html, reachable ONLY from the sandbox network
+#   sandbox   image-only service: built here, started per link/attachment by the backend
+name: mailguard
+
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "80:8000"
+    env_file: .env            # VULTR_INFERENCE_KEY lives here; never passed to sandboxes
+    environment:
+      DATA_DIR: /data
+      DEMO_DIR: /app/demo
+      SANDBOX_IMAGE: mailguard-sandbox:latest
+      SANDBOX_NETWORK: mailguard_sandbox
+      PUBLIC_HOST: ${PUBLIC_HOST:-65.20.114.181}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data:/data
+      - ./demo:/app/demo:ro
+    networks: [app]
+
+  demo-web:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./demo:/usr/share/nginx/html:ro
+      - ./demo/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      sandbox:
+        ipv4_address: 172.30.99.10
+        aliases:
+          - login.micros0ft-account.test
+          - collect.micros0ft-account.test
+          - docs.sharefile-portal.test
+
+  sandbox:
+    build: ./sandbox
+    image: mailguard-sandbox:latest
+    profiles: ["build-only"]
+
+networks:
+  app: {}
+  sandbox:
+    name: mailguard_sandbox
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: mg-sandbox
+    ipam:
+      config:
+        - subnet: 172.30.99.0/24

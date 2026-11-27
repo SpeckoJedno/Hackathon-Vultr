@@ -1,0 +1,21 @@
+From: Anna Lindqvist <anna.lindqvist@contoso.com>
+To: team@contoso.com
+Subject: Notes from Thursday's planning meeting
+Date: Thu, 26 Nov 2026 09:14:00 +0100
+Message-ID: <planning-2611@contoso.com>
+Authentication-Results: mx.contoso.com; spf=pass smtp.mailfrom=contoso.com; dkim=pass header.d=contoso.com; dmarc=pass
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Hi all,
+
+Thanks for a good meeting on Thursday. Short summary:
+
+- We move the staging servers to Vultr Stockholm next sprint.
+- Erik writes the migration checklist.
+- Docs we looked at: https://docs.vultr.com/
+
+No action needed from anyone else this week.
+
+Have a nice weekend,
+Anna
